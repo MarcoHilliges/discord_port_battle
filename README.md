@@ -64,7 +64,7 @@ Der Ablauf ist:
 Wichtig:
 
 - Zwischen den Schritten gibt es jeweils einen `Weiter`-Button, weil Discord kein Modal direkt aus einem anderen Modal oeffnen kann.
-- Fuer `Ausrichtende Gilde`, `Unterstuetzende Gilden` und `Gegnerische Gilde` gibt es eigene Input-Felder.
+- Für `Ausrichter`, `Unterstützende` und `Gegner` gibt es eigene Input-Felder.
 - Schlacht-Ort wird aktuell per Select-Feld aus der Liste der verfuegbaren Orte gewaehlt.
 - Schlachtdatum wird ueber ein Datums-Select gesetzt.
 - Schlachtuhrzeit wird ueber zwei Select-Felder gesetzt: Stunde und Minute.
