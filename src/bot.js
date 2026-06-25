@@ -400,7 +400,8 @@ function buildBattleEmbed(battle) {
 
     const formatMember = (member) => {
       const shipText = member.shipName ? ` - ${member.shipName}` : "";
-      return `- ${member.displayName}${shipText}`;
+      const memberText = member.userId ? `<@${member.userId}>` : member.displayName;
+      return `- ${memberText}${shipText}`;
     };
 
     const sections = [];
