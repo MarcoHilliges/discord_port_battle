@@ -263,39 +263,19 @@ function formatDateValue(value) {
   return `${day}.${month}.${String(year).slice(-2)}`;
 }
 
-function formatRelativeTime(targetDateTime) {
-  if (!(targetDateTime instanceof Date) || Number.isNaN(targetDateTime.getTime())) {
-    return "";
-  }
-
-  const diffMinutes = Math.round((targetDateTime.getTime() - Date.now()) / 60000);
-
-  if (Math.abs(diffMinutes) < 1) {
-    return "jetzt";
-  }
-
-  const relativeTimeFormatter = new Intl.RelativeTimeFormat("de", { numeric: "always" });
-
-  if (Math.abs(diffMinutes) >= 1440) {
-    return relativeTimeFormatter.format(Math.round(diffMinutes / 1440), "day");
-  }
-
-  if (Math.abs(diffMinutes) >= 60) {
-    return relativeTimeFormatter.format(Math.round(diffMinutes / 60), "hour");
-  }
-
-  return relativeTimeFormatter.format(diffMinutes, "minute");
-}
-
 function formatDateTimeWithRelative(dateValue, timeValue) {
   if (!dateValue || !timeValue) {
     return "Noch nicht gesetzt";
   }
 
   const targetDateTime = new Date(`${dateValue}T${timeValue}:00`);
-  const relativeText = formatRelativeTime(targetDateTime);
+  const unixTimestamp = Math.floor(targetDateTime.getTime() / 1000);
 
-  return `${formatDateValue(dateValue)} ${timeValue}${relativeText ? ` (${relativeText})` : ""}`;
+  if (Number.isNaN(unixTimestamp)) {
+    return `${formatDateValue(dateValue)} ${timeValue}`;
+  }
+
+  return `${formatDateValue(dateValue)} ${timeValue} (<t:${unixTimestamp}:R>)`;
 }
 
 function getSignupCount(battle) {
