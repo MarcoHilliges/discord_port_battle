@@ -22,10 +22,12 @@ const {
   getAllShips,
   getBattle,
   getBattleChannelId,
+  getGuildClassLimitDefaults,
   getHarborBySlug,
   getHarbors,
   getShipById,
   setBattleChannelId,
+  setGuildClassLimitDefaults,
   updateBattle
 } = require("./storage");
 const { getShipClassChoices, getShipClassLabel, getShipLevelChoices } = require("./wosbShips");
@@ -44,6 +46,7 @@ const OPEN_CREATE_BATTLE_BUTTON_ID = "open-create-battle";
 const CREATE_BATTLE_MODAL_ID = "create-battle-modal";
 const EDIT_BATTLE_MODAL_ID = "edit-battle-modal";
 const CLASS_LIMITS_MODAL_ID = "draft-class-limits-modal";
+const CLASS_LIMIT_DEFAULTS_MODAL_ID = "class-limit-defaults-modal";
 
 const DRAFT_STAGE_BATTLE = "battle";
 const DRAFT_STAGE_BATTLE_SCHEDULE = "battle-schedule";
@@ -72,6 +75,7 @@ const DRAFT_HARBOR_PAGE_NEXT_ID = "draft-harbor-page-next";
 const DRAFT_CONFIRM_ID = "draft-confirm";
 const DRAFT_CANCEL_ID = "draft-cancel";
 const DRAFT_EDIT_CLASS_LIMITS_ID = "draft-edit-class-limits";
+const DRAFT_TOGGLE_CLASS_LIMIT_ENFORCEMENT_ID = "draft-toggle-class-limit-enforcement";
 
 const draftStore = new Map();
 
@@ -294,6 +298,11 @@ function getDefaultClassLimitWeights(shipClasses = []) {
   );
 }
 
+function getGuildDefaultClassLimitWeights(guildId, shipClasses = Object.keys(DEFAULT_CLASS_LIMIT_WEIGHTS)) {
+  const guildDefaults = getGuildClassLimitDefaults(guildId);
+  return normalizeClassLimitWeights(shipClasses, { ...DEFAULT_CLASS_LIMIT_WEIGHTS, ...guildDefaults });
+}
+
 function normalizeClassLimitWeights(shipClasses = [], classLimitWeights = {}) {
   return Object.fromEntries(
     shipClasses.map((shipClass) => {
@@ -339,6 +348,10 @@ function buildClassLimitCounts(playerCount, shipClasses = [], classLimitWeights 
   }
 
   return Object.fromEntries(rawCounts.map((entry) => [entry.shipClass, entry.base]));
+}
+
+function getClassLimitModeLabel(isEnforced) {
+  return isEnforced ? "Erzwungen" : "Nur Richtwert";
 }
 
 function formatClassLimitSummary(shipClasses = [], playerCount = 0, classLimitWeights = {}) {
@@ -539,7 +552,7 @@ function buildBattleEmbed(battle) {
       { name: "-----------------", value: "", inline: false },
       {
         name: "Vorgaben",
-        value: `Klassen: ${battle.shipClassLabels.join(", ")}\nStufen: ${battle.shipLevels.map((level) => `Stufe ${level}`).join(", ")}\nKlassenlimits:\n${formatClassLimitSummary(battle.shipClasses, battle.playerCount, battle.classLimitWeights)}`,
+        value: `Klassen: ${battle.shipClassLabels.join(", ")}\nStufen: ${battle.shipLevels.map((level) => `Stufe ${level}`).join(", ")}`,
         inline: false
       },
       { name: "-----------------", value: "", inline: false },
@@ -742,6 +755,28 @@ function buildClassLimitsModal(draft) {
     );
 }
 
+function buildClassLimitDefaultsModal(guildId) {
+  const defaults = getGuildDefaultClassLimitWeights(guildId);
+  const shipClasses = Object.keys(DEFAULT_CLASS_LIMIT_WEIGHTS);
+
+  return new ModalBuilder()
+    .setCustomId(`${CLASS_LIMIT_DEFAULTS_MODAL_ID}:${guildId}`)
+    .setTitle("Standard-Klassenverhältnis")
+    .addComponents(
+      ...shipClasses.map((shipClass) =>
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId(`class_limit_default_${shipClass}`)
+            .setLabel(`${getShipClassLabel(shipClass)} Standard`)
+            .setStyle(TextInputStyle.Short)
+            .setValue(String(defaults[shipClass] || 1))
+            .setRequired(true)
+            .setMaxLength(2)
+        )
+      )
+    );
+}
+
 function createDraftFromBattle(base) {
   const battleTimeParts = splitTimeValue(base.battleTime);
   const meetingTimeParts = splitTimeValue(base.meetingTime);
@@ -770,7 +805,8 @@ function createDraftFromBattle(base) {
     playerCount: base.playerCount || 0,
     shipClasses: [...(base.shipClasses || [])],
     shipLevels: [...(base.shipLevels || [])],
-    classLimitWeights: normalizeClassLimitWeights(base.shipClasses || [], base.classLimitWeights || {})
+    classLimitWeights: normalizeClassLimitWeights(base.shipClasses || [], base.classLimitWeights || {}),
+    classLimitsEnforced: base.classLimitsEnforced !== false
   };
 }
 
@@ -857,6 +893,7 @@ function buildDraftEmbed(draft) {
       { name: "Spieleranzahl", value: draft.playerCount ? String(draft.playerCount) : "Noch nicht gesetzt", inline: true },
       { name: "Schiffklassen", value: classText, inline: false },
       { name: "Schiffsstufen", value: levelText, inline: false },
+      { name: "Klassenlimit-Modus", value: getClassLimitModeLabel(draft.classLimitsEnforced), inline: false },
       { name: "Klassenlimits", value: classLimitText, inline: false }
     );
 }
@@ -1128,6 +1165,12 @@ function buildClassLimitsStageComponents(draft) {
   return [
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
+        .setCustomId(`${DRAFT_TOGGLE_CLASS_LIMIT_ENFORCEMENT_ID}:${draft.id}`)
+        .setLabel(`Modus: ${getClassLimitModeLabel(draft.classLimitsEnforced)}`)
+        .setStyle(draft.classLimitsEnforced ? ButtonStyle.Primary : ButtonStyle.Secondary)
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
         .setCustomId(`${DRAFT_BACK_ID}:${draft.id}`)
         .setLabel("Zurück")
         .setStyle(ButtonStyle.Secondary),
@@ -1229,6 +1272,10 @@ function createCommands() {
     new SlashCommandBuilder()
       .setName("schlacht-panel")
       .setDescription("Sendet ein Panel mit Button zum Erstellen von Hafenschlachten")
+      .toJSON(),
+    new SlashCommandBuilder()
+      .setName("schlacht-planer-standard-klassenlimits")
+      .setDescription("Legt server-spezifische Standardwerte für Klassenverhältnisse fest")
       .toJSON()
   ];
 }
@@ -1360,6 +1407,16 @@ async function createBot(config) {
         return;
       }
 
+      if (interaction.isChatInputCommand() && interaction.commandName === "schlacht-planer-standard-klassenlimits") {
+        if (!isAdminInteraction(interaction)) {
+          await replyAdminOnly(interaction);
+          return;
+        }
+
+        await interaction.showModal(buildClassLimitDefaultsModal(guildId));
+        return;
+      }
+
       if (interaction.isModalSubmit()) {
         if (!assignedBattleChannelId) {
           await replyChannelNotConfigured(interaction);
@@ -1384,7 +1441,8 @@ async function createBot(config) {
             hostingGuild: interaction.fields.getTextInputValue("hosting_guild"),
             supportGuilds: interaction.fields.getTextInputValue("support_guilds"),
             enemyGuild: interaction.fields.getTextInputValue("enemy_guild"),
-            description: interaction.fields.getTextInputValue("battle_description")
+            description: interaction.fields.getTextInputValue("battle_description"),
+            classLimitWeights: getGuildDefaultClassLimitWeights(guildId)
           });
           draft.guildId = guildId;
 
@@ -1393,6 +1451,41 @@ async function createBot(config) {
           await interaction.reply({
             embeds: [buildDraftEmbed(draft)],
             components: buildDraftComponents(draft),
+            flags: MessageFlags.Ephemeral
+          });
+          return;
+        }
+
+        if (interaction.customId.startsWith(`${CLASS_LIMIT_DEFAULTS_MODAL_ID}:`)) {
+          if (!isAdminInteraction(interaction)) {
+            await replyAdminOnly(interaction);
+            return;
+          }
+
+          const [, targetGuildId] = interaction.customId.split(":");
+          const shipClasses = Object.keys(DEFAULT_CLASS_LIMIT_WEIGHTS);
+          const nextDefaults = {};
+
+          for (const shipClass of shipClasses) {
+            const parsedValue = Number.parseInt(
+              interaction.fields.getTextInputValue(`class_limit_default_${shipClass}`),
+              10
+            );
+
+            if (!Number.isInteger(parsedValue) || parsedValue <= 0) {
+              await interaction.reply({
+                content: `Bitte gib für ${getShipClassLabel(shipClass)} eine ganze Zahl größer 0 an.`,
+                flags: MessageFlags.Ephemeral
+              });
+              return;
+            }
+
+            nextDefaults[shipClass] = parsedValue;
+          }
+
+          setGuildClassLimitDefaults(targetGuildId, nextDefaults);
+          await interaction.reply({
+            content: `Die server-spezifischen Standardwerte wurden gespeichert.\n${formatClassLimitSummary(shipClasses, 8, nextDefaults)}`,
             flags: MessageFlags.Ephemeral
           });
           return;
@@ -1551,6 +1644,32 @@ async function createBot(config) {
           }
 
           await interaction.showModal(buildClassLimitsModal(draft));
+          return;
+        }
+
+        if (action === DRAFT_TOGGLE_CLASS_LIMIT_ENFORCEMENT_ID) {
+          if (!draft) {
+            await interaction.reply({
+              content: "Dieser Schlacht-Entwurf wurde nicht gefunden.",
+              flags: MessageFlags.Ephemeral
+            });
+            return;
+          }
+
+          if (draft.ownerId !== interaction.user.id) {
+            await interaction.reply({
+              content: "Nur der Ersteller kann diesen Entwurf bearbeiten.",
+              flags: MessageFlags.Ephemeral
+            });
+            return;
+          }
+
+          draft.classLimitsEnforced = !draft.classLimitsEnforced;
+          draftStore.set(draft.id, draft);
+          await interaction.update({
+            embeds: [buildDraftEmbed(draft)],
+            components: buildDraftComponents(draft)
+          });
           return;
         }
 
@@ -1844,6 +1963,7 @@ async function createBot(config) {
             shipClassLabels: draft.shipClasses.map((shipClass) => getShipClassLabel(shipClass)),
             shipLevels: [...draft.shipLevels],
             classLimitWeights: normalizeClassLimitWeights(draft.shipClasses, draft.classLimitWeights),
+            classLimitsEnforced: draft.classLimitsEnforced !== false,
             categories,
             createdByUserId: draft.ownerId
           };
@@ -2053,7 +2173,7 @@ async function createBot(config) {
             return;
           }
 
-          if (targetStatus === "signup" && rule) {
+          if (targetStatus === "signup" && rule && selectedBattle.classLimitsEnforced !== false) {
             const ignoredUserId =
               existingSignup &&
               (existingSignup.member.status || "signup") === "signup" &&
@@ -2133,7 +2253,7 @@ async function createBot(config) {
             return;
           }
 
-          if (targetStatus === "signup" && rule) {
+          if (targetStatus === "signup" && rule && selectedBattle.classLimitsEnforced !== false) {
             const ignoredUserId =
               existingSignup &&
               (existingSignup.member.status || "signup") === "signup" &&

@@ -155,6 +155,28 @@ function setBattleChannelId(guildId, channelId) {
   return store.guildSettings[guildId].battleChannelId;
 }
 
+function getGuildClassLimitDefaults(guildId) {
+  const store = readSettingsStore();
+
+  if (!guildId) {
+    return {};
+  }
+
+  return store.guildSettings?.[guildId]?.classLimitDefaults || {};
+}
+
+function setGuildClassLimitDefaults(guildId, classLimitDefaults) {
+  if (!guildId) {
+    return {};
+  }
+
+  const store = readSettingsStore();
+  store.guildSettings[guildId] = store.guildSettings[guildId] || {};
+  store.guildSettings[guildId].classLimitDefaults = classLimitDefaults || {};
+  writeSettingsStore(store);
+  return store.guildSettings[guildId].classLimitDefaults;
+}
+
 module.exports = {
   createBattle,
   getBattle,
@@ -163,7 +185,9 @@ module.exports = {
   getHarbors,
   getHarborBySlug,
   getBattleChannelId,
+  getGuildClassLimitDefaults,
   getShipById,
   getShipTrees,
-  setBattleChannelId
+  setBattleChannelId,
+  setGuildClassLimitDefaults
 };
