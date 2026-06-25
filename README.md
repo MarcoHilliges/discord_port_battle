@@ -48,6 +48,34 @@ GUILD_ID=deine_test_server_id
 npm start
 ```
 
+## Bot zu Discord hinzufuegen
+
+Benutzte OAuth2-Scopes:
+
+- `bot`
+- `applications.commands`
+
+Minimal noetige Bot-Berechtigungen:
+
+- `Kanaele ansehen`
+- `Nachrichten senden`
+- `Links einbetten`
+- `Nachrichtenverlauf anzeigen`
+- `Slash-Befehle verwenden`
+
+Konkreter Invite-Link fuer die aktuelle Application:
+
+```text
+https://discord.com/oauth2/authorize?client_id=1518550504299434004&permissions=2147568640&integration_type=0&scope=bot+applications.commands
+```
+
+Hinweise:
+
+- Privileged Gateway Intents muessen fuer diesen Bot nicht aktiviert werden.
+- Der Bot selbst braucht keine `Administrator`-Berechtigung.
+- Im Bot duerfen nur Server-Administratoren die Einrichtungsbefehle ausfuehren.
+- Nach dem Einladen zuerst `/schlacht-planer-kanal-zuweisen` verwenden, damit der Zielkanal fuer den Schlacht-Planer gesetzt wird.
+
 ## Slash-Command
 
 Der Command `/schlacht-anlegen` erwartet keine direkten Slash-Optionen mehr.

@@ -549,8 +549,8 @@ async function ensureCreateBattlePanel(client, channelId) {
   await channel.send(payload);
 }
 
-function getAssignedBattleChannelId(config) {
-  return getBattleChannelId() || config.panelChannelId || "";
+function getAssignedBattleChannelIdForGuild(guildId) {
+  return getBattleChannelId(guildId);
 }
 
 function isAdminInteraction(interaction) {
@@ -1096,12 +1096,39 @@ function createCommands() {
   ];
 }
 
-async function registerCommands(token, clientId, guildId) {
+async function registerCommands(token, clientId, guildIds = []) {
   const rest = new REST({ version: "10" }).setToken(token);
   const commands = createCommands();
 
-  if (guildId) {
-    await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: commands });
+  if (guildIds.length > 0) {
+    let successCount = 0;
+    let missingAccessCount = 0;
+
+    for (const guildId of guildIds) {
+      try {
+        await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: commands });
+        successCount += 1;
+        console.log(`Slash-Commands für Server ${guildId} registriert.`);
+      } catch (error) {
+        if (error?.code === 50001) {
+          missingAccessCount += 1;
+          console.warn(`Slash-Commands für Server ${guildId} übersprungen: Missing Access.`);
+          continue;
+        }
+
+        throw error;
+      }
+    }
+
+    if (successCount === 0) {
+      console.warn(
+        `Für keinen der konfigurierten Discord-Server konnten Slash-Commands registriert werden (${missingAccessCount}/${guildIds.length}x Missing Access).`
+      );
+      console.warn(
+        "Der Bot startet trotzdem. Prüfe GUILD_IDS in .env und lade den Bot mit Scope applications.commands in den Ziel-Server ein."
+      );
+    }
+
     return;
   }
 
@@ -1115,17 +1142,12 @@ async function createBot(config) {
 
   client.once(Events.ClientReady, async (readyClient) => {
     console.log(`Bot online als ${readyClient.user.tag}`);
-
-    try {
-      await ensureCreateBattlePanel(readyClient, getAssignedBattleChannelId(config));
-    } catch (error) {
-      console.error("Schlacht-Panel konnte nicht erstellt werden:", error);
-    }
   });
 
   client.on(Events.InteractionCreate, async (interaction) => {
     try {
-      const assignedBattleChannelId = getAssignedBattleChannelId(config);
+      const guildId = interaction.guildId || "";
+      const assignedBattleChannelId = getAssignedBattleChannelIdForGuild(guildId);
 
       if (interaction.isChatInputCommand() && interaction.commandName === "schlacht-planer-kanal-zuweisen") {
         if (!isAdminInteraction(interaction)) {
@@ -1143,7 +1165,7 @@ async function createBot(config) {
           return;
         }
 
-        setBattleChannelId(channel.id);
+        setBattleChannelId(guildId, channel.id);
         await ensureCreateBattlePanel(client, channel.id);
 
         await interaction.reply({
@@ -1227,6 +1249,7 @@ async function createBot(config) {
             enemyGuild: interaction.fields.getTextInputValue("enemy_guild"),
             description: interaction.fields.getTextInputValue("battle_description")
           });
+          draft.guildId = guildId;
 
           draftStore.set(draft.id, draft);
 
@@ -1573,6 +1596,7 @@ async function createBot(config) {
 
           const battleData = {
             title: draft.title,
+            guildId: draft.guildId || guildId,
             battleDate: draft.battleDate,
             battleTime: buildTimeFromParts(draft.battleHour, draft.battleMinute),
             battleLocation: draft.battleLocation,
@@ -1878,7 +1902,7 @@ async function createBot(config) {
     }
   });
 
-  await registerCommands(config.token, config.clientId, config.guildId);
+  await registerCommands(config.token, config.clientId, config.guildIds || []);
   await client.login(config.token);
 }
 

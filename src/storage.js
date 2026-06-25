@@ -25,7 +25,7 @@ function ensureStorage() {
   }
 
   if (!fs.existsSync(settingsFile)) {
-    fs.writeFileSync(settingsFile, JSON.stringify({ battleChannelId: "" }, null, 2), "utf8");
+    fs.writeFileSync(settingsFile, JSON.stringify({ guildSettings: {} }, null, 2), "utf8");
   }
 }
 
@@ -52,10 +52,32 @@ function readHarborStore() {
   return JSON.parse(raw);
 }
 
+function normalizeSettingsStore(store) {
+  if (store?.guildSettings && typeof store.guildSettings === "object") {
+    return {
+      guildSettings: { ...store.guildSettings }
+    };
+  }
+
+  if (typeof store?.battleChannelId === "string" && store.battleChannelId) {
+    return {
+      guildSettings: {
+        legacy: {
+          battleChannelId: store.battleChannelId
+        }
+      }
+    };
+  }
+
+  return {
+    guildSettings: {}
+  };
+}
+
 function readSettingsStore() {
   ensureStorage();
   const raw = fs.readFileSync(settingsFile, "utf8");
-  return JSON.parse(raw);
+  return normalizeSettingsStore(JSON.parse(raw));
 }
 
 function writeSettingsStore(store) {
@@ -111,16 +133,26 @@ function getHarborBySlug(harborSlug) {
   return getHarbors().find((harbor) => harbor.harbor === harborSlug) || null;
 }
 
-function getBattleChannelId() {
+function getBattleChannelId(guildId) {
   const store = readSettingsStore();
-  return store.battleChannelId || "";
+
+  if (!guildId) {
+    return "";
+  }
+
+  return store.guildSettings?.[guildId]?.battleChannelId || "";
 }
 
-function setBattleChannelId(channelId) {
+function setBattleChannelId(guildId, channelId) {
+  if (!guildId) {
+    return "";
+  }
+
   const store = readSettingsStore();
-  store.battleChannelId = channelId || "";
+  store.guildSettings[guildId] = store.guildSettings[guildId] || {};
+  store.guildSettings[guildId].battleChannelId = channelId || "";
   writeSettingsStore(store);
-  return store.battleChannelId;
+  return store.guildSettings[guildId].battleChannelId;
 }
 
 module.exports = {
