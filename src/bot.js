@@ -1192,7 +1192,7 @@ function buildClassLimitsStageComponents(draft) {
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`${DRAFT_TOGGLE_CLASS_LIMIT_ENFORCEMENT_ID}:${draft.id}`)
-        .setLabel(`Modus: ${getClassLimitModeLabel(draft.classLimitsEnforced)}`)
+        .setLabel(`Klassenlimit: ${getClassLimitModeLabel(draft.classLimitsEnforced)}`)
         .setStyle(draft.classLimitsEnforced ? ButtonStyle.Primary : ButtonStyle.Secondary)
     ),
     new ActionRowBuilder().addComponents(
