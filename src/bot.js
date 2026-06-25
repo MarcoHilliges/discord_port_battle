@@ -1274,7 +1274,7 @@ function createCommands() {
       .setDescription("Sendet ein Panel mit Button zum Erstellen von Hafenschlachten")
       .toJSON(),
     new SlashCommandBuilder()
-      .setName("schlacht-planer-standard-klassenlimits")
+      .setName("schlacht-standard-klassenlimits")
       .setDescription("Legt server-spezifische Standardwerte für Klassenverhältnisse fest")
       .toJSON()
   ];
@@ -1407,7 +1407,7 @@ async function createBot(config) {
         return;
       }
 
-      if (interaction.isChatInputCommand() && interaction.commandName === "schlacht-planer-standard-klassenlimits") {
+      if (interaction.isChatInputCommand() && interaction.commandName === "schlacht-standard-klassenlimits") {
         if (!isAdminInteraction(interaction)) {
           await replyAdminOnly(interaction);
           return;
