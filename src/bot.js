@@ -43,11 +43,13 @@ const OPEN_CREATE_BATTLE_BUTTON_ID = "open-create-battle";
 
 const CREATE_BATTLE_MODAL_ID = "create-battle-modal";
 const EDIT_BATTLE_MODAL_ID = "edit-battle-modal";
+const CLASS_LIMITS_MODAL_ID = "draft-class-limits-modal";
 
 const DRAFT_STAGE_BATTLE = "battle";
 const DRAFT_STAGE_BATTLE_SCHEDULE = "battle-schedule";
 const DRAFT_STAGE_MEETING = "meeting";
 const DRAFT_STAGE_FLEET = "fleet";
+const DRAFT_STAGE_CLASS_LIMITS = "class-limits";
 
 const DRAFT_BATTLE_LOCATION_ID = "draft-battle-location";
 const DRAFT_BATTLE_DATE_ID = "draft-battle-date";
@@ -69,6 +71,7 @@ const DRAFT_HARBOR_PAGE_PREV_ID = "draft-harbor-page-prev";
 const DRAFT_HARBOR_PAGE_NEXT_ID = "draft-harbor-page-next";
 const DRAFT_CONFIRM_ID = "draft-confirm";
 const DRAFT_CANCEL_ID = "draft-cancel";
+const DRAFT_EDIT_CLASS_LIMITS_ID = "draft-edit-class-limits";
 
 const draftStore = new Map();
 
@@ -85,6 +88,13 @@ const PLAYER_COUNT_CHOICES = [
   { label: "40", value: "40" }
 ];
 const DEFAULT_BATTLE_DESCRIPTION = "Spieler können sich unten anmelden, auf Reserve setzen, ihren Status ändern oder sich abmelden.";
+const DEFAULT_CLASS_LIMIT_WEIGHTS = {
+  fast: 1,
+  combat: 2,
+  heavy: 4,
+  siege: 1,
+  transport: 1
+};
 
 function formatLighthouseLabel(lighthouse) {
   const directionMap = {
@@ -278,6 +288,72 @@ function formatDateTimeWithRelative(dateValue, timeValue) {
   return `${formatDateValue(dateValue)} ${timeValue} (<t:${unixTimestamp}:R>)`;
 }
 
+function getDefaultClassLimitWeights(shipClasses = []) {
+  return Object.fromEntries(
+    shipClasses.map((shipClass) => [shipClass, DEFAULT_CLASS_LIMIT_WEIGHTS[shipClass] || 1])
+  );
+}
+
+function normalizeClassLimitWeights(shipClasses = [], classLimitWeights = {}) {
+  return Object.fromEntries(
+    shipClasses.map((shipClass) => {
+      const weight = Number(classLimitWeights[shipClass]);
+      return [shipClass, Number.isInteger(weight) && weight > 0 ? weight : (DEFAULT_CLASS_LIMIT_WEIGHTS[shipClass] || 1)];
+    })
+  );
+}
+
+function buildClassLimitCounts(playerCount, shipClasses = [], classLimitWeights = {}) {
+  if (!playerCount || shipClasses.length === 0) {
+    return {};
+  }
+
+  const normalizedWeights = normalizeClassLimitWeights(shipClasses, classLimitWeights);
+  const totalWeight = shipClasses.reduce((sum, shipClass) => sum + normalizedWeights[shipClass], 0);
+
+  if (totalWeight <= 0) {
+    return Object.fromEntries(shipClasses.map((shipClass) => [shipClass, 0]));
+  }
+
+  const rawCounts = shipClasses.map((shipClass) => {
+    const rawCount = (playerCount * normalizedWeights[shipClass]) / totalWeight;
+    return {
+      shipClass,
+      base: Math.floor(rawCount),
+      fraction: rawCount - Math.floor(rawCount)
+    };
+  });
+
+  let remaining = playerCount - rawCounts.reduce((sum, entry) => sum + entry.base, 0);
+  rawCounts.sort((left, right) => {
+    if (right.fraction !== left.fraction) {
+      return right.fraction - left.fraction;
+    }
+
+    return shipClasses.indexOf(left.shipClass) - shipClasses.indexOf(right.shipClass);
+  });
+
+  for (let index = 0; index < rawCounts.length && remaining > 0; index += 1) {
+    rawCounts[index].base += 1;
+    remaining -= 1;
+  }
+
+  return Object.fromEntries(rawCounts.map((entry) => [entry.shipClass, entry.base]));
+}
+
+function formatClassLimitSummary(shipClasses = [], playerCount = 0, classLimitWeights = {}) {
+  if (shipClasses.length === 0) {
+    return "Noch nicht gesetzt";
+  }
+
+  const normalizedWeights = normalizeClassLimitWeights(shipClasses, classLimitWeights);
+  const classLimitCounts = buildClassLimitCounts(playerCount, shipClasses, normalizedWeights);
+
+  return shipClasses
+    .map((shipClass) => `${getShipClassLabel(shipClass)}: ${classLimitCounts[shipClass] || 0} (${normalizedWeights[shipClass]} Teile)`)
+    .join("\n");
+}
+
 function getSignupCount(battle) {
   return battle.categories.reduce((total, category) => {
     return (
@@ -291,6 +367,31 @@ function getReserveCount(battle) {
   return battle.categories.reduce((total, category) => {
     return total + (battle.signups[category] || []).filter((member) => member.status === "reserve").length;
   }, 0);
+}
+
+function getClassSignupCount(battle, shipClass, ignoredUserId = "") {
+  return battle.categories.reduce((total, category) => {
+    const rule = findCategoryRule(battle, category);
+
+    if (!rule || rule.shipClass !== shipClass) {
+      return total;
+    }
+
+    return (
+      total +
+      (battle.signups[category] || []).filter(
+        (member) => (member.status || "signup") === "signup" && member.userId !== ignoredUserId
+      ).length
+    );
+  }, 0);
+}
+
+function getBattleClassLimitCounts(battle) {
+  return buildClassLimitCounts(
+    battle.playerCount,
+    battle.shipClasses || [],
+    battle.classLimitWeights || getDefaultClassLimitWeights(battle.shipClasses || [])
+  );
 }
 
 function buildSignupCategories(shipClasses, shipLevels) {
@@ -438,7 +539,7 @@ function buildBattleEmbed(battle) {
       { name: "-----------------", value: "", inline: false },
       {
         name: "Vorgaben",
-        value: `Klassen: ${battle.shipClassLabels.join(", ")}\nStufen: ${battle.shipLevels.map((level) => `Stufe ${level}`).join(", ")}`,
+        value: `Klassen: ${battle.shipClassLabels.join(", ")}\nStufen: ${battle.shipLevels.map((level) => `Stufe ${level}`).join(", ")}\nKlassenlimits:\n${formatClassLimitSummary(battle.shipClasses, battle.playerCount, battle.classLimitWeights)}`,
         inline: false
       },
       { name: "-----------------", value: "", inline: false },
@@ -620,6 +721,27 @@ function buildEditBattleModal(battle) {
   return buildBattleModal(`${EDIT_BATTLE_MODAL_ID}:${battle.id}`, "Allgemeine Angaben bearbeiten", battle);
 }
 
+function buildClassLimitsModal(draft) {
+  const normalizedWeights = normalizeClassLimitWeights(draft.shipClasses, draft.classLimitWeights);
+
+  return new ModalBuilder()
+    .setCustomId(`${CLASS_LIMITS_MODAL_ID}:${draft.id}`)
+    .setTitle("Klassenverhältnis festlegen")
+    .addComponents(
+      ...draft.shipClasses.map((shipClass) =>
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId(`class_limit_${shipClass}`)
+            .setLabel(`${getShipClassLabel(shipClass)} Verhältnis`)
+            .setStyle(TextInputStyle.Short)
+            .setValue(String(normalizedWeights[shipClass] || 1))
+            .setRequired(true)
+            .setMaxLength(2)
+        )
+      )
+    );
+}
+
 function createDraftFromBattle(base) {
   const battleTimeParts = splitTimeValue(base.battleTime);
   const meetingTimeParts = splitTimeValue(base.meetingTime);
@@ -647,7 +769,8 @@ function createDraftFromBattle(base) {
     meetingTime: base.meetingTime || "",
     playerCount: base.playerCount || 0,
     shipClasses: [...(base.shipClasses || [])],
-    shipLevels: [...(base.shipLevels || [])]
+    shipLevels: [...(base.shipLevels || [])],
+    classLimitWeights: normalizeClassLimitWeights(base.shipClasses || [], base.classLimitWeights || {})
   };
 }
 
@@ -694,6 +817,7 @@ function buildDraftEmbed(draft) {
     draft.shipLevels.length > 0
       ? draft.shipLevels.map((level) => `Stufe ${level}`).join(", ")
       : "Noch nicht gesetzt";
+  const classLimitText = formatClassLimitSummary(draft.shipClasses, draft.playerCount, draft.classLimitWeights);
 
   const isEditMode = draft.mode === "edit";
   let description = isEditMode
@@ -714,6 +838,10 @@ function buildDraftEmbed(draft) {
     description = isEditMode
       ? "Passe jetzt Spieleranzahl, Schiffklassen und Schiffsstufen an."
       : "Wähle jetzt Spieleranzahl, Schiffklassen und Schiffsstufen.";
+  } else if (draft.stage === DRAFT_STAGE_CLASS_LIMITS) {
+    description = isEditMode
+      ? "Passe jetzt das Klassenverhältnis innerhalb der Flotte an."
+      : "Lege jetzt das Klassenverhältnis innerhalb der Flotte fest.";
   }
 
   return new EmbedBuilder()
@@ -728,7 +856,8 @@ function buildDraftEmbed(draft) {
       { name: "Treffpunkt", value: `${formatMeetingLocation(draft.meetingLocation, draft.meetingLighthouse)}\n${formatDateTimeWithRelative(draft.meetingDate, draft.meetingTime)}`, inline: false },
       { name: "Spieleranzahl", value: draft.playerCount ? String(draft.playerCount) : "Noch nicht gesetzt", inline: true },
       { name: "Schiffklassen", value: classText, inline: false },
-      { name: "Schiffsstufen", value: levelText, inline: false }
+      { name: "Schiffsstufen", value: levelText, inline: false },
+      { name: "Klassenlimits", value: classLimitText, inline: false }
     );
 }
 
@@ -984,6 +1113,29 @@ function buildFleetStageComponents(draft) {
         .setLabel("Zurück")
         .setStyle(ButtonStyle.Secondary),
       new ButtonBuilder()
+        .setCustomId(`${DRAFT_NEXT_ID}:${draft.id}`)
+        .setLabel("Weiter zu Klassenlimits")
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId(`${DRAFT_CANCEL_ID}:${draft.id}`)
+        .setLabel("Abbrechen")
+        .setStyle(ButtonStyle.Secondary)
+    )
+  ];
+}
+
+function buildClassLimitsStageComponents(draft) {
+  return [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`${DRAFT_BACK_ID}:${draft.id}`)
+        .setLabel("Zurück")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId(`${DRAFT_EDIT_CLASS_LIMITS_ID}:${draft.id}`)
+        .setLabel("Verhältnis anpassen")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
         .setCustomId(`${DRAFT_CONFIRM_ID}:${draft.id}`)
         .setLabel(draft.mode === "edit" ? "Änderungen speichern" : "Schlacht erstellen")
         .setStyle(ButtonStyle.Primary),
@@ -1006,6 +1158,10 @@ function buildDraftComponents(draft) {
 
   if (draft.stage === DRAFT_STAGE_MEETING) {
     return buildMeetingStageComponents(draft);
+  }
+
+  if (draft.stage === DRAFT_STAGE_CLASS_LIMITS) {
+    return buildClassLimitsStageComponents(draft);
   }
 
   return buildFleetStageComponents(draft);
@@ -1242,6 +1398,54 @@ async function createBot(config) {
           return;
         }
 
+        if (interaction.customId.startsWith(`${CLASS_LIMITS_MODAL_ID}:`)) {
+          const [, draftId] = interaction.customId.split(":");
+          const draft = draftStore.get(draftId);
+
+          if (!draft) {
+            await interaction.reply({
+              content: "Dieser Schlacht-Entwurf wurde nicht gefunden.",
+              flags: MessageFlags.Ephemeral
+            });
+            return;
+          }
+
+          if (draft.ownerId !== interaction.user.id) {
+            await interaction.reply({
+              content: "Nur der Ersteller kann diesen Entwurf bearbeiten.",
+              flags: MessageFlags.Ephemeral
+            });
+            return;
+          }
+
+          const classLimitWeights = {};
+
+          for (const shipClass of draft.shipClasses) {
+            const parsedValue = Number.parseInt(interaction.fields.getTextInputValue(`class_limit_${shipClass}`), 10);
+
+            if (!Number.isInteger(parsedValue) || parsedValue <= 0) {
+              await interaction.reply({
+                content: `Bitte gib für ${getShipClassLabel(shipClass)} eine ganze Zahl größer 0 an.`,
+                flags: MessageFlags.Ephemeral
+              });
+              return;
+            }
+
+            classLimitWeights[shipClass] = parsedValue;
+          }
+
+          draft.classLimitWeights = classLimitWeights;
+          draft.stage = DRAFT_STAGE_CLASS_LIMITS;
+          draftStore.set(draft.id, draft);
+
+          await interaction.reply({
+            embeds: [buildDraftEmbed(draft)],
+            components: buildDraftComponents(draft),
+            flags: MessageFlags.Ephemeral
+          });
+          return;
+        }
+
         if (interaction.customId.startsWith(`${EDIT_BATTLE_MODAL_ID}:`)) {
           const [, battleId] = interaction.customId.split(":");
           const battle = getBattle(battleId);
@@ -1318,6 +1522,35 @@ async function createBot(config) {
 
         if (assignedBattleChannelId && interaction.channelId !== assignedBattleChannelId) {
           await replyWrongChannel(interaction, assignedBattleChannelId);
+          return;
+        }
+
+        if (action === DRAFT_EDIT_CLASS_LIMITS_ID) {
+          if (!draft) {
+            await interaction.reply({
+              content: "Dieser Schlacht-Entwurf wurde nicht gefunden.",
+              flags: MessageFlags.Ephemeral
+            });
+            return;
+          }
+
+          if (draft.ownerId !== interaction.user.id) {
+            await interaction.reply({
+              content: "Nur der Ersteller kann diesen Entwurf bearbeiten.",
+              flags: MessageFlags.Ephemeral
+            });
+            return;
+          }
+
+          if (draft.shipClasses.length === 0) {
+            await interaction.reply({
+              content: "Bitte wähle zuerst Schiffklassen aus.",
+              flags: MessageFlags.Ephemeral
+            });
+            return;
+          }
+
+          await interaction.showModal(buildClassLimitsModal(draft));
           return;
         }
 
@@ -1535,6 +1768,29 @@ async function createBot(config) {
               embeds: [buildDraftEmbed(draft)],
               components: buildDraftComponents(draft)
             });
+            return;
+          }
+
+          if (draft.stage === DRAFT_STAGE_FLEET) {
+            if (draft.playerCount <= 0 || draft.shipClasses.length === 0 || draft.shipLevels.length === 0) {
+              await interaction.reply({
+                content: "Bitte wähle zuerst Spieleranzahl, Schiffklassen und Schiffsstufen aus.",
+                flags: MessageFlags.Ephemeral
+              });
+              return;
+            }
+
+            const categories = buildSignupCategories(draft.shipClasses, draft.shipLevels);
+
+            if (categories.length > 25) {
+              await interaction.reply({
+                content: `Es entstehen ${categories.length} Anmeldeoptionen. Discord erlaubt maximal 25. Bitte wähle weniger Klassen oder Stufen.`,
+                flags: MessageFlags.Ephemeral
+              });
+              return;
+            }
+
+            await interaction.showModal(buildClassLimitsModal(draft));
           }
           return;
         }
@@ -1546,6 +1802,8 @@ async function createBot(config) {
             draft.stage = DRAFT_STAGE_BATTLE_SCHEDULE;
           } else if (draft.stage === DRAFT_STAGE_FLEET) {
             draft.stage = DRAFT_STAGE_MEETING;
+          } else if (draft.stage === DRAFT_STAGE_CLASS_LIMITS) {
+            draft.stage = DRAFT_STAGE_FLEET;
           }
 
           draftStore.set(draft.id, draft);
@@ -1557,14 +1815,6 @@ async function createBot(config) {
         }
 
         if (action === DRAFT_CONFIRM_ID) {
-          if (draft.playerCount <= 0 || draft.shipClasses.length === 0 || draft.shipLevels.length === 0) {
-            await interaction.reply({
-              content: "Bitte wähle zuerst Spieleranzahl, Schiffklassen und Schiffsstufen aus.",
-              flags: MessageFlags.Ephemeral
-            });
-            return;
-          }
-
           const categories = buildSignupCategories(draft.shipClasses, draft.shipLevels);
 
           if (categories.length > 25) {
@@ -1593,6 +1843,7 @@ async function createBot(config) {
             shipClasses: [...draft.shipClasses],
             shipClassLabels: draft.shipClasses.map((shipClass) => getShipClassLabel(shipClass)),
             shipLevels: [...draft.shipLevels],
+            classLimitWeights: normalizeClassLimitWeights(draft.shipClasses, draft.classLimitWeights),
             categories,
             createdByUserId: draft.ownerId
           };
@@ -1782,6 +2033,7 @@ async function createBot(config) {
           }
 
           const selectedCategory = interaction.values[0];
+          const rule = findCategoryRule(selectedBattle, selectedCategory);
 
           if (!selectedBattle.categories.includes(selectedCategory)) {
             await interaction.reply({
@@ -1799,6 +2051,25 @@ async function createBot(config) {
               flags: MessageFlags.Ephemeral
             });
             return;
+          }
+
+          if (targetStatus === "signup" && rule) {
+            const ignoredUserId =
+              existingSignup &&
+              (existingSignup.member.status || "signup") === "signup" &&
+              findCategoryRule(selectedBattle, existingSignup.category)?.shipClass === rule.shipClass
+                ? interaction.user.id
+                : "";
+            const classLimitCounts = getBattleClassLimitCounts(selectedBattle);
+            const classSignupCount = getClassSignupCount(selectedBattle, rule.shipClass, ignoredUserId);
+
+            if (classSignupCount >= (classLimitCounts[rule.shipClass] || 0)) {
+              await interaction.reply({
+                content: `Für ${getShipClassLabel(rule.shipClass)} sind bereits alle Plätze belegt.`,
+                flags: MessageFlags.Ephemeral
+              });
+              return;
+            }
           }
 
           const shipSelectComponents = buildShipSelectComponents(
@@ -1848,6 +2119,7 @@ async function createBot(config) {
           }
 
           const existingSignup = findUserSignup(selectedBattle, interaction.user.id);
+          const rule = findCategoryRule(selectedBattle, category);
 
           if (
             targetStatus === "signup" &&
@@ -1859,6 +2131,25 @@ async function createBot(config) {
               flags: MessageFlags.Ephemeral
             });
             return;
+          }
+
+          if (targetStatus === "signup" && rule) {
+            const ignoredUserId =
+              existingSignup &&
+              (existingSignup.member.status || "signup") === "signup" &&
+              findCategoryRule(selectedBattle, existingSignup.category)?.shipClass === rule.shipClass
+                ? interaction.user.id
+                : "";
+            const classLimitCounts = getBattleClassLimitCounts(selectedBattle);
+            const classSignupCount = getClassSignupCount(selectedBattle, rule.shipClass, ignoredUserId);
+
+            if (classSignupCount >= (classLimitCounts[rule.shipClass] || 0)) {
+              await interaction.reply({
+                content: `Für ${getShipClassLabel(rule.shipClass)} sind bereits alle Plätze belegt.`,
+                flags: MessageFlags.Ephemeral
+              });
+              return;
+            }
           }
 
           addUserToCategory(selectedBattle, category, interaction.user, ship, targetStatus);
