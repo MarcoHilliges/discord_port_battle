@@ -515,38 +515,52 @@ function buildShipSelectComponents(battle, categoryIndex, targetStatus) {
 }
 
 function buildBattleEmbed(battle) {
-  const categoryLines = battle.categories.map((category) => {
-    const members = battle.signups[category] || [];
-    const signedUpMembers = members.filter((member) => (member.status || "signup") === "signup");
-    const reserveMembers = members.filter((member) => member.status === "reserve");
+  const classLines = battle.shipClasses.map((shipClass) => {
+    const classMembers = battle.categories.flatMap((category) => {
+      const rule = findCategoryRule(battle, category);
+
+      if (!rule || rule.shipClass !== shipClass) {
+        return [];
+      }
+
+      return (battle.signups[category] || []).map((member) => ({
+        ...member,
+        shipLevel: rule.level
+      }));
+    });
+
+    const signedUpMembers = classMembers.filter((member) => (member.status || "signup") === "signup");
+    const reserveMembers = classMembers.filter((member) => member.status === "reserve");
 
     if (signedUpMembers.length === 0 && reserveMembers.length === 0) {
-      return `**${category}**\n- keine Anmeldung`;
+      return `**${getShipClassLabel(shipClass)}**\n- keine Anmeldung`;
     }
 
     const formatMember = (member) => {
-      const shipText = member.shipName ? ` - ${member.shipName}` : "";
+      const shipText = member.shipName ? ` - ${member.shipName} (St. ${member.shipLevel})` : "";
       const memberText = member.userId ? `<@${member.userId}>` : member.displayName;
       return `- ${memberText}${shipText}`;
+    };
+
+    const sortMembers = (left, right) => {
+      if ((left.shipLevel || 0) !== (right.shipLevel || 0)) {
+        return (left.shipLevel || 0) - (right.shipLevel || 0);
+      }
+
+      return (left.shipName || "").localeCompare(right.shipName || "");
     };
 
     const sections = [];
 
     if (signedUpMembers.length > 0) {
-      sections.push(`Anmeldung:\n${signedUpMembers.map(formatMember).join("\n")}`);
+      sections.push(`Anmeldung:\n${signedUpMembers.sort(sortMembers).map(formatMember).join("\n")}`);
     }
 
     if (reserveMembers.length > 0) {
-      sections.push(`Reserve:\n${reserveMembers.map(formatMember).join("\n")}`);
+      sections.push(`Reserve:\n${reserveMembers.sort(sortMembers).map(formatMember).join("\n")}`);
     }
 
-    const list = sections
-      .map((member) => {
-        return member;
-      })
-      .join("\n");
-
-    return `**${category}**\n${list}`;
+    return `**${getShipClassLabel(shipClass)}**\n${sections.join("\n")}`;
   });
 
   return new EmbedBuilder()
@@ -568,7 +582,7 @@ function buildBattleEmbed(battle) {
         inline: false
       },
       { name: "-----------------", value: "", inline: false },
-      { name: "Schiffskategorien", value: categoryLines.join("\n\n"), inline: false },
+      { name: "Schiffskategorien", value: classLines.join("\n\n"), inline: false },
       { name: "-----------------", value: "", inline: false }
     )
     .setFooter({ text: "Port Battle Planner made by TheWolf | Marco" });
