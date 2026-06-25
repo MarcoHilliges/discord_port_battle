@@ -367,6 +367,18 @@ function formatClassLimitSummary(shipClasses = [], playerCount = 0, classLimitWe
     .join("\n");
 }
 
+function formatClassLimitCountsSummary(shipClasses = [], playerCount = 0, classLimitWeights = {}) {
+  if (shipClasses.length === 0) {
+    return "-";
+  }
+
+  const classLimitCounts = buildClassLimitCounts(playerCount, shipClasses, classLimitWeights);
+
+  return shipClasses
+    .map((shipClass) => `${getShipClassLabel(shipClass)}: ${classLimitCounts[shipClass] || 0}`)
+    .join("\n");
+}
+
 function getSignupCount(battle) {
   return battle.categories.reduce((total, category) => {
     return (
@@ -552,7 +564,7 @@ function buildBattleEmbed(battle) {
       { name: "-----------------", value: "", inline: false },
       {
         name: "Vorgaben",
-        value: `Klassen: ${battle.shipClassLabels.join(", ")}\nStufen: ${battle.shipLevels.map((level) => `Stufe ${level}`).join(", ")}`,
+        value: `Klassen: ${battle.shipClassLabels.join(", ")}\nStufen: ${battle.shipLevels.map((level) => `Stufe ${level}`).join(", ")}\nKlassenlimits:\n${formatClassLimitCountsSummary(battle.shipClasses, battle.playerCount, battle.classLimitWeights)}`,
         inline: false
       },
       { name: "-----------------", value: "", inline: false },
@@ -1531,11 +1543,18 @@ async function createBot(config) {
           draft.stage = DRAFT_STAGE_CLASS_LIMITS;
           draftStore.set(draft.id, draft);
 
-          await interaction.reply({
-            embeds: [buildDraftEmbed(draft)],
-            components: buildDraftComponents(draft),
-            flags: MessageFlags.Ephemeral
-          });
+          if (interaction.message && typeof interaction.update === "function") {
+            await interaction.update({
+              embeds: [buildDraftEmbed(draft)],
+              components: buildDraftComponents(draft)
+            });
+          } else {
+            await interaction.reply({
+              embeds: [buildDraftEmbed(draft)],
+              components: buildDraftComponents(draft),
+              flags: MessageFlags.Ephemeral
+            });
+          }
           return;
         }
 
