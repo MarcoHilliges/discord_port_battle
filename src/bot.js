@@ -798,6 +798,10 @@ function isDraftInteractionAllowed(interaction, assignedBattleChannelId, draft) 
   return interaction.channelId === assignedBattleChannelId || interaction.channelId === draft?.contextChannelId;
 }
 
+function isUnknownInteractionError(error) {
+  return error?.code === 10062;
+}
+
 function buildBattleModal(customId, title, defaults = {}) {
   return new ModalBuilder()
     .setCustomId(customId)
@@ -1999,10 +2003,10 @@ async function createBot(config) {
               return;
             }
 
-            await interaction.reply({
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            await interaction.editReply({
               embeds: [buildUnregistrationsEmbed(battle, 0)],
-              components: buildUnregistrationsComponents(battle, 0),
-              flags: MessageFlags.Ephemeral
+              components: buildUnregistrationsComponents(battle, 0)
             });
             return;
           }
@@ -2040,41 +2044,41 @@ async function createBot(config) {
           const existingSignup = findUserSignup(battle, interaction.user.id);
 
           if (action === SIGNUP_BUTTON_ID || action === RESERVE_BUTTON_ID) {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
             if (existingSignup) {
-              await interaction.reply({
+              await interaction.editReply({
                 content: "Du bist bereits angemeldet oder auf Reserve. Bitte nutze Ändern oder Abmelden.",
-                flags: MessageFlags.Ephemeral
               });
               return;
             }
 
             if (action === SIGNUP_BUTTON_ID && getSignupCount(battle) >= battle.playerCount) {
-              await interaction.reply({
+              await interaction.editReply({
                 content: "Diese Hafenschlacht ist bereits voll. Nutze Reserve, wenn du dich vormerken willst.",
-                flags: MessageFlags.Ephemeral
               });
               return;
             }
 
             const targetStatus = action === SIGNUP_BUTTON_ID ? "signup" : "reserve";
-            await interaction.reply({
+            await interaction.editReply({
               content: `Wähle jetzt die Kategorie für deine ${getStatusLabel(targetStatus)}.`,
               components: buildCategorySelectComponents(battle, targetStatus),
-              flags: MessageFlags.Ephemeral
             });
             return;
           }
 
           if (action === CHANGE_BUTTON_ID) {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
             if (!existingSignup) {
-              await interaction.reply({
+              await interaction.editReply({
                 content: "Du bist aktuell weder angemeldet noch auf Reserve.",
-                flags: MessageFlags.Ephemeral
               });
               return;
             }
 
-            await interaction.reply({
+            await interaction.editReply({
               content: `Aktuell: **${existingSignup.category}** als **${getStatusLabel(existingSignup.member.status || "signup")}**. Wähle den neuen Status.`,
               components: [
                 new ActionRowBuilder().addComponents(
@@ -2087,17 +2091,17 @@ async function createBot(config) {
                     .setLabel("Zu Reserve")
                     .setStyle(ButtonStyle.Secondary)
                 )
-              ],
-              flags: MessageFlags.Ephemeral
+              ]
             });
             return;
           }
 
           if (action === CHANGE_TO_SIGNUP_BUTTON_ID || action === CHANGE_TO_RESERVE_BUTTON_ID) {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
             if (!existingSignup) {
-              await interaction.reply({
+              await interaction.editReply({
                 content: "Du bist aktuell weder angemeldet noch auf Reserve.",
-                flags: MessageFlags.Ephemeral
               });
               return;
             }
@@ -2109,31 +2113,29 @@ async function createBot(config) {
               (existingSignup.member.status || "signup") !== "signup" &&
               getSignupCount(battle) >= battle.playerCount
             ) {
-              await interaction.reply({
+              await interaction.editReply({
                 content: "Diese Hafenschlacht ist bereits voll. Ein Wechsel in Anmeldung ist aktuell nicht möglich.",
-                flags: MessageFlags.Ephemeral
               });
               return;
             }
 
-            await interaction.reply({
+            await interaction.editReply({
               content: `Wähle jetzt die Kategorie für deine ${getStatusLabel(targetStatus)}.`,
               components: buildCategorySelectComponents(battle, targetStatus),
-              flags: MessageFlags.Ephemeral
             });
             return;
           }
 
           if (action === UNREGISTER_BUTTON_ID) {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
             removeUserFromAllCategories(battle, interaction.user.id);
             addUserToUnregistrations(battle, interaction.user);
             updateBattle(battle);
             await refreshBattleMessage(client, interaction, battle);
-            await interaction.reply({
+            await interaction.editReply({
               content: existingSignup
                 ? "Du wurdest von der Hafenschlacht abgemeldet."
-                : "Du wurdest als abgemeldet für diese Hafenschlacht eingetragen.",
-              flags: MessageFlags.Ephemeral
+                : "Du wurdest als abgemeldet für diese Hafenschlacht eingetragen."
             });
             return;
           }
@@ -2620,6 +2622,10 @@ async function createBot(config) {
       }
     } catch (error) {
       console.error(error);
+
+      if (isUnknownInteractionError(error)) {
+        return;
+      }
 
       if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
         await interaction.reply({
