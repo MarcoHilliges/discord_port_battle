@@ -699,6 +699,78 @@ async function replyWrongChannel(interaction, channelId) {
   });
 }
 
+async function replyBattleThreadOnly(interaction, battle) {
+  const threadHint = battle?.threadId
+    ? `Bitte nutze dafür den zugehörigen Schlacht-Thread <#${battle.threadId}>.`
+    : "Bitte nutze dafür den zugehörigen Schlacht-Thread.";
+
+  await interaction.reply({
+    content: threadHint,
+    flags: MessageFlags.Ephemeral
+  });
+}
+
+function truncateText(value, maxLength) {
+  if (!value) {
+    return "";
+  }
+
+  if (value.length <= maxLength) {
+    return value;
+  }
+
+  return `${value.slice(0, Math.max(0, maxLength - 1))}…`;
+}
+
+function buildBattleThreadName(battle) {
+  const harborName = formatHarborName(battle.battleLocation);
+  return truncateText(`Port Battle - ${harborName} - ${battle.title}`, 100);
+}
+
+function buildBattleThreadIntro(battle) {
+  return {
+    content: `Dieser Thread gehört zur **${battle.title}** am **${formatDateTimeWithRelative(battle.battleDate, battle.battleTime)}**.\n\nNutze die Buttons unten für deine Teilnahme oder Änderungen.`,
+    components: buildBattleComponents(battle)
+  };
+}
+
+async function ensureBattleThread(client, battle, message) {
+  if (battle.threadId) {
+    return battle;
+  }
+
+  try {
+    const thread = await message.startThread({
+      name: buildBattleThreadName(battle),
+      autoArchiveDuration: 10080
+    });
+    const threadMessage = await thread.send(buildBattleThreadIntro(battle));
+    battle.threadId = thread.id;
+    battle.threadMessageId = threadMessage.id;
+    updateBattle(battle);
+  } catch (error) {
+    console.warn(`Thread für Schlacht ${battle.id} konnte nicht erstellt werden: ${error.message}`);
+  }
+
+  return battle;
+}
+
+function isBattleInteractionAllowed(interaction, assignedBattleChannelId, battle) {
+  if (!assignedBattleChannelId || !battle?.threadId) {
+    return false;
+  }
+
+  return interaction.channelId === battle.threadId;
+}
+
+function isDraftInteractionAllowed(interaction, assignedBattleChannelId, draft) {
+  if (!assignedBattleChannelId) {
+    return false;
+  }
+
+  return interaction.channelId === assignedBattleChannelId || interaction.channelId === draft?.contextChannelId;
+}
+
 function buildBattleModal(customId, title, defaults = {}) {
   return new ModalBuilder()
     .setCustomId(customId)
@@ -828,6 +900,7 @@ function createDraftFromBattle(base) {
     meetingLighthouse: base.meetingLighthouse || "",
     meetingDate: base.meetingDate || base.battleDate || "",
     meetingTime: base.meetingTime || "",
+    contextChannelId: base.contextChannelId || "",
     playerCount: base.playerCount || 0,
     shipClasses: [...(base.shipClasses || [])],
     shipLevels: [...(base.shipLevels || [])],
@@ -1274,8 +1347,23 @@ async function refreshBattleMessage(client, interaction, battle) {
 
   await message.edit({
     embeds: [buildBattleEmbed(battle)],
-    components: buildBattleComponents(battle)
+    components: []
   });
+
+  await ensureBattleThread(client, battle, message);
+
+  if (battle.threadId && battle.threadMessageId) {
+    try {
+      const thread = await client.channels.fetch(battle.threadId);
+
+      if (thread && thread.isTextBased()) {
+        const threadMessage = await thread.messages.fetch(battle.threadMessageId);
+        await threadMessage.edit(buildBattleThreadIntro(battle));
+      }
+    } catch (error) {
+      console.warn(`Thread-Nachricht für Schlacht ${battle.id} konnte nicht aktualisiert werden: ${error.message}`);
+    }
+  }
 }
 
 function createCommands() {
@@ -1444,17 +1532,17 @@ async function createBot(config) {
       }
 
       if (interaction.isModalSubmit()) {
-        if (!assignedBattleChannelId) {
-          await replyChannelNotConfigured(interaction);
-          return;
-        }
-
-        if (interaction.channelId !== assignedBattleChannelId) {
-          await replyWrongChannel(interaction, assignedBattleChannelId);
-          return;
-        }
-
         if (interaction.customId === CREATE_BATTLE_MODAL_ID) {
+          if (!assignedBattleChannelId) {
+            await replyChannelNotConfigured(interaction);
+            return;
+          }
+
+          if (interaction.channelId !== assignedBattleChannelId) {
+            await replyWrongChannel(interaction, assignedBattleChannelId);
+            return;
+          }
+
           if (!isAdminInteraction(interaction)) {
             await replyAdminOnly(interaction);
             return;
@@ -1463,6 +1551,7 @@ async function createBot(config) {
           const draft = createDraftFromBattle({
             ownerId: interaction.user.id,
             mode: "create",
+            contextChannelId: interaction.channelId,
             title: interaction.fields.getTextInputValue("title"),
             hostingGuild: interaction.fields.getTextInputValue("hosting_guild"),
             supportGuilds: interaction.fields.getTextInputValue("support_guilds"),
@@ -1483,6 +1572,16 @@ async function createBot(config) {
         }
 
         if (interaction.customId.startsWith(`${CLASS_LIMIT_DEFAULTS_MODAL_ID}:`)) {
+          if (!assignedBattleChannelId) {
+            await replyChannelNotConfigured(interaction);
+            return;
+          }
+
+          if (interaction.channelId !== assignedBattleChannelId) {
+            await replyWrongChannel(interaction, assignedBattleChannelId);
+            return;
+          }
+
           if (!isAdminInteraction(interaction)) {
             await replyAdminOnly(interaction);
             return;
@@ -1537,6 +1636,11 @@ async function createBot(config) {
             return;
           }
 
+          if (!isDraftInteractionAllowed(interaction, assignedBattleChannelId, draft)) {
+            await replyWrongChannel(interaction, assignedBattleChannelId);
+            return;
+          }
+
           const classLimitWeights = {};
 
           for (const shipClass of draft.shipClasses) {
@@ -1584,6 +1688,11 @@ async function createBot(config) {
             return;
           }
 
+          if (!isBattleInteractionAllowed(interaction, assignedBattleChannelId, battle)) {
+            await replyBattleThreadOnly(interaction, battle);
+            return;
+          }
+
           const canEdit = battle.createdByUserId
             ? battle.createdByUserId === interaction.user.id || interaction.memberPermissions?.has("ManageGuild")
             : interaction.memberPermissions?.has("ManageGuild");
@@ -1600,7 +1709,8 @@ async function createBot(config) {
             ...battle,
             ownerId: interaction.user.id,
             mode: "edit",
-            battleId: battle.id
+            battleId: battle.id,
+            contextChannelId: interaction.channelId
           });
 
           draft.title = interaction.fields.getTextInputValue("title");
@@ -1646,11 +1756,6 @@ async function createBot(config) {
         const [action, objectId] = interaction.customId.split(":");
         const draft = draftStore.get(objectId);
 
-        if (assignedBattleChannelId && interaction.channelId !== assignedBattleChannelId) {
-          await replyWrongChannel(interaction, assignedBattleChannelId);
-          return;
-        }
-
         if (action === DRAFT_EDIT_CLASS_LIMITS_ID) {
           if (!draft) {
             await interaction.reply({
@@ -1665,6 +1770,11 @@ async function createBot(config) {
               content: "Nur der Ersteller kann diesen Entwurf bearbeiten.",
               flags: MessageFlags.Ephemeral
             });
+            return;
+          }
+
+          if (!isDraftInteractionAllowed(interaction, assignedBattleChannelId, draft)) {
+            await replyWrongChannel(interaction, assignedBattleChannelId);
             return;
           }
 
@@ -1697,6 +1807,11 @@ async function createBot(config) {
             return;
           }
 
+          if (!isDraftInteractionAllowed(interaction, assignedBattleChannelId, draft)) {
+            await replyWrongChannel(interaction, assignedBattleChannelId);
+            return;
+          }
+
           draft.classLimitsEnforced = !draft.classLimitsEnforced;
           draftStore.set(draft.id, draft);
           await interaction.update({
@@ -1722,6 +1837,11 @@ async function createBot(config) {
               content: "Diese Schlacht wurde nicht gefunden.",
               flags: MessageFlags.Ephemeral
             });
+            return;
+          }
+
+          if (!isBattleInteractionAllowed(interaction, assignedBattleChannelId, battle)) {
+            await replyBattleThreadOnly(interaction, battle);
             return;
           }
 
@@ -1862,6 +1982,11 @@ async function createBot(config) {
             content: "Nur der Ersteller kann diesen Entwurf bearbeiten.",
             flags: MessageFlags.Ephemeral
           });
+          return;
+        }
+
+        if (!isDraftInteractionAllowed(interaction, assignedBattleChannelId, draft)) {
+          await replyWrongChannel(interaction, assignedBattleChannelId);
           return;
         }
 
@@ -2043,11 +2168,12 @@ async function createBot(config) {
           } else if (interaction.channel && interaction.channel.isTextBased()) {
             const message = await interaction.channel.send({
               embeds: [buildBattleEmbed(battle)],
-              components: buildBattleComponents(battle)
+              components: []
             });
             battle.channelId = interaction.channel.id;
             battle.messageId = message.id;
             updateBattle(battle);
+            await ensureBattleThread(client, battle, message);
           }
           return;
         }
@@ -2093,11 +2219,6 @@ async function createBot(config) {
           return;
         }
 
-        if (interaction.channelId !== assignedBattleChannelId) {
-          await replyWrongChannel(interaction, assignedBattleChannelId);
-          return;
-        }
-
         const [action, draftId] = interaction.customId.split(":");
         const draft = draftStore.get(draftId);
 
@@ -2107,6 +2228,11 @@ async function createBot(config) {
               content: "Nur der Ersteller kann diesen Entwurf bearbeiten.",
               flags: MessageFlags.Ephemeral
             });
+            return;
+          }
+
+          if (!isDraftInteractionAllowed(interaction, assignedBattleChannelId, draft)) {
+            await replyWrongChannel(interaction, assignedBattleChannelId);
             return;
           }
 
@@ -2170,6 +2296,11 @@ async function createBot(config) {
             content: "Diese Schlacht wurde nicht gefunden.",
             flags: MessageFlags.Ephemeral
           });
+          return;
+        }
+
+        if (!isBattleInteractionAllowed(interaction, assignedBattleChannelId, battle)) {
+          await replyBattleThreadOnly(interaction, battle);
           return;
         }
 
