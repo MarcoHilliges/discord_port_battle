@@ -37,6 +37,10 @@ const RESERVE_BUTTON_ID = "battle-reserve";
 const CHANGE_BUTTON_ID = "battle-change";
 const UNREGISTER_BUTTON_ID = "battle-unregister";
 const EDIT_BATTLE_BUTTON_ID = "battle-edit";
+const VIEW_UNREGISTRATIONS_BUTTON_ID = "battle-view-unregistrations";
+const VIEW_UNREGISTRATIONS_PREV_BUTTON_ID = "battle-view-unregistrations-prev";
+const VIEW_UNREGISTRATIONS_NEXT_BUTTON_ID = "battle-view-unregistrations-next";
+const VIEW_UNREGISTRATIONS_CLOSE_BUTTON_ID = "battle-view-unregistrations-close";
 const CHANGE_TO_SIGNUP_BUTTON_ID = "battle-change-signup";
 const CHANGE_TO_RESERVE_BUTTON_ID = "battle-change-reserve";
 const CATEGORY_SELECT_ID = "battle-category";
@@ -80,6 +84,7 @@ const DRAFT_TOGGLE_CLASS_LIMIT_ENFORCEMENT_ID = "draft-toggle-class-limit-enforc
 const draftStore = new Map();
 
 const HARBOR_PAGE_SIZE = 25;
+const UNREGISTRATIONS_PAGE_SIZE = 10;
 
 const PLAYER_COUNT_CHOICES = [
   { label: "5", value: "5" },
@@ -394,6 +399,14 @@ function getReserveCount(battle) {
   }, 0);
 }
 
+function getUnregistrationEntries(battle) {
+  return Array.isArray(battle.unregistrations) ? battle.unregistrations : [];
+}
+
+function getUnregistrationCount(battle) {
+  return getUnregistrationEntries(battle).length;
+}
+
 function getClassSignupCount(battle, shipClass, ignoredUserId = "") {
   return battle.categories.reduce((total, category) => {
     const rule = findCategoryRule(battle, category);
@@ -583,6 +596,7 @@ function buildBattleEmbed(battle) {
       },
       { name: "-----------------", value: "", inline: false },
       { name: "Schiffskategorien", value: classLines.join("\n\n"), inline: false },
+      { name: "Abmeldungen", value: String(getUnregistrationCount(battle)), inline: false },
       { name: "-----------------", value: "", inline: false }
     )
     .setFooter({ text: "Port Battle Planner made by TheWolf | Marco" });
@@ -612,6 +626,10 @@ function buildBattleComponents(battle) {
       new ButtonBuilder()
         .setCustomId(`${EDIT_BATTLE_BUTTON_ID}:${battle.id}`)
         .setLabel("Schlacht bearbeiten")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId(`${VIEW_UNREGISTRATIONS_BUTTON_ID}:${battle.id}`)
+        .setLabel("Abmeldungen ansehen")
         .setStyle(ButtonStyle.Secondary)
     )
   ];
@@ -1315,8 +1333,24 @@ function removeUserFromAllCategories(battle, userId) {
   }
 }
 
+function removeUserFromUnregistrations(battle, userId) {
+  battle.unregistrations = getUnregistrationEntries(battle).filter((entry) => entry.userId !== userId);
+}
+
+function addUserToUnregistrations(battle, user) {
+  removeUserFromUnregistrations(battle, user.id);
+  battle.unregistrations = getUnregistrationEntries(battle);
+  battle.unregistrations.push({
+    userId: user.id,
+    displayName: user.globalName || user.username,
+    userTag: user.tag,
+    createdAt: new Date().toISOString()
+  });
+}
+
 function addUserToCategory(battle, category, user, ship, status = "signup") {
   removeUserFromAllCategories(battle, user.id);
+  removeUserFromUnregistrations(battle, user.id);
   battle.signups[category] = battle.signups[category] || [];
   battle.signups[category].push({
     userId: user.id,
@@ -1326,6 +1360,90 @@ function addUserToCategory(battle, category, user, ship, status = "signup") {
     shipName: ship?.name || "",
     status
   });
+}
+
+function buildUnregistrationsOverview(battle) {
+  const entries = getUnregistrationEntries(battle);
+
+  if (entries.length === 0) {
+    return "Es liegen aktuell keine Abmeldungen vor.";
+  }
+
+  return entries
+    .slice()
+    .sort((left, right) => {
+      const leftTime = new Date(left.createdAt || 0).getTime();
+      const rightTime = new Date(right.createdAt || 0).getTime();
+      return rightTime - leftTime;
+    })
+    .map((entry) => `- ${entry.userId ? `<@${entry.userId}>` : (entry.displayName || entry.userTag || "Unbekannt")}`)
+    .join("\n");
+}
+
+function getSortedUnregistrations(battle) {
+  return getUnregistrationEntries(battle)
+    .slice()
+    .sort((left, right) => {
+      const leftTime = new Date(left.createdAt || 0).getTime();
+      const rightTime = new Date(right.createdAt || 0).getTime();
+      return rightTime - leftTime;
+    });
+}
+
+function getUnregistrationsPageCount(battle) {
+  return Math.max(1, Math.ceil(getUnregistrationEntries(battle).length / UNREGISTRATIONS_PAGE_SIZE));
+}
+
+function buildUnregistrationsEmbed(battle, page = 0) {
+  const entries = getSortedUnregistrations(battle);
+  const pageCount = getUnregistrationsPageCount(battle);
+  const safePage = Math.min(Math.max(page, 0), pageCount - 1);
+  const start = safePage * UNREGISTRATIONS_PAGE_SIZE;
+  const pageEntries = entries.slice(start, start + UNREGISTRATIONS_PAGE_SIZE);
+
+  const description = pageEntries.length > 0
+    ? pageEntries
+      .map((entry, index) => {
+        const position = start + index + 1;
+        const memberText = entry.userId ? `<@${entry.userId}>` : (entry.displayName || entry.userTag || "Unbekannt");
+        const timeText = entry.createdAt ? ` - ${formatDateValue(String(entry.createdAt).slice(0, 10))}` : "";
+        return `${position}. ${memberText}${timeText}`;
+      })
+      .join("\n")
+    : "Es liegen aktuell keine Abmeldungen vor.";
+
+  return new EmbedBuilder()
+    .setTitle(`Abmeldungen: ${battle.title}`)
+    .setDescription(description)
+    .addFields({
+      name: "Übersicht",
+      value: `Gesamt: ${entries.length}\nSeite: ${safePage + 1}/${pageCount}`,
+      inline: false
+    });
+}
+
+function buildUnregistrationsComponents(battle, page = 0) {
+  const pageCount = getUnregistrationsPageCount(battle);
+  const safePage = Math.min(Math.max(page, 0), pageCount - 1);
+
+  return [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`${VIEW_UNREGISTRATIONS_PREV_BUTTON_ID}:${battle.id}:${safePage}`)
+        .setLabel("Zurück")
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(safePage <= 0),
+      new ButtonBuilder()
+        .setCustomId(`${VIEW_UNREGISTRATIONS_NEXT_BUTTON_ID}:${battle.id}:${safePage}`)
+        .setLabel("Weiter")
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(safePage >= pageCount - 1),
+      new ButtonBuilder()
+        .setCustomId(`${VIEW_UNREGISTRATIONS_CLOSE_BUTTON_ID}:${battle.id}`)
+        .setLabel("Schließen")
+        .setStyle(ButtonStyle.Danger)
+    )
+  ];
 }
 
 async function refreshBattleMessage(client, interaction, battle) {
@@ -1827,6 +1945,10 @@ async function createBot(config) {
           action === CHANGE_BUTTON_ID ||
           action === UNREGISTER_BUTTON_ID ||
           action === EDIT_BATTLE_BUTTON_ID ||
+          action === VIEW_UNREGISTRATIONS_BUTTON_ID ||
+          action === VIEW_UNREGISTRATIONS_PREV_BUTTON_ID ||
+          action === VIEW_UNREGISTRATIONS_NEXT_BUTTON_ID ||
+          action === VIEW_UNREGISTRATIONS_CLOSE_BUTTON_ID ||
           action === CHANGE_TO_SIGNUP_BUTTON_ID ||
           action === CHANGE_TO_RESERVE_BUTTON_ID
         ) {
@@ -1859,6 +1981,50 @@ async function createBot(config) {
             }
 
             await interaction.showModal(buildEditBattleModal(battle));
+            return;
+          }
+
+          if (action === VIEW_UNREGISTRATIONS_BUTTON_ID) {
+            if (!isAdminInteraction(interaction)) {
+              await replyAdminOnly(interaction);
+              return;
+            }
+
+            await interaction.reply({
+              embeds: [buildUnregistrationsEmbed(battle, 0)],
+              components: buildUnregistrationsComponents(battle, 0),
+              flags: MessageFlags.Ephemeral
+            });
+            return;
+          }
+
+          if (action === VIEW_UNREGISTRATIONS_PREV_BUTTON_ID || action === VIEW_UNREGISTRATIONS_NEXT_BUTTON_ID) {
+            if (!isAdminInteraction(interaction)) {
+              await replyAdminOnly(interaction);
+              return;
+            }
+
+            const currentPage = Number.parseInt(interaction.customId.split(":")[2] || "0", 10) || 0;
+            const nextPage = action === VIEW_UNREGISTRATIONS_PREV_BUTTON_ID ? currentPage - 1 : currentPage + 1;
+
+            await interaction.update({
+              embeds: [buildUnregistrationsEmbed(battle, nextPage)],
+              components: buildUnregistrationsComponents(battle, nextPage)
+            });
+            return;
+          }
+
+          if (action === VIEW_UNREGISTRATIONS_CLOSE_BUTTON_ID) {
+            if (!isAdminInteraction(interaction)) {
+              await replyAdminOnly(interaction);
+              return;
+            }
+
+            await interaction.update({
+              content: "Die Abmeldungsübersicht wurde geschlossen.",
+              embeds: [],
+              components: []
+            });
             return;
           }
 
@@ -1950,19 +2116,14 @@ async function createBot(config) {
           }
 
           if (action === UNREGISTER_BUTTON_ID) {
-            if (!existingSignup) {
-              await interaction.reply({
-                content: "Du bist aktuell weder angemeldet noch auf Reserve.",
-                flags: MessageFlags.Ephemeral
-              });
-              return;
-            }
-
             removeUserFromAllCategories(battle, interaction.user.id);
+            addUserToUnregistrations(battle, interaction.user);
             updateBattle(battle);
             await refreshBattleMessage(client, interaction, battle);
             await interaction.reply({
-              content: "Du wurdest von der Hafenschlacht abgemeldet.",
+              content: existingSignup
+                ? "Du wurdest von der Hafenschlacht abgemeldet."
+                : "Du wurdest als abgemeldet für diese Hafenschlacht eingetragen.",
               flags: MessageFlags.Ephemeral
             });
             return;
@@ -2142,6 +2303,7 @@ async function createBot(config) {
             battle = {
               ...existingBattle,
               ...battleData,
+              unregistrations: getUnregistrationEntries(existingBattle),
               signups: mergeSignupsByCategory(existingBattle.signups || {}, existingBattle.categories || [], categories)
             };
 
@@ -2150,6 +2312,7 @@ async function createBot(config) {
             battle = createBattle({
               id: `${Date.now()}`,
               ...battleData,
+              unregistrations: [],
               signups: Object.fromEntries(categories.map((category) => [category, []])),
               createdAt: new Date().toISOString()
             });
