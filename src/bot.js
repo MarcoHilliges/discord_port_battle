@@ -596,6 +596,7 @@ function buildBattleEmbed(battle) {
       },
       { name: "-----------------", value: "", inline: false },
       { name: "Schiffskategorien", value: classLines.join("\n\n"), inline: false },
+      { name: "-----------------", value: "", inline: false },
       { name: "Abmeldungen", value: String(getUnregistrationCount(battle)), inline: false },
       { name: "-----------------", value: "", inline: false }
     )
