@@ -775,11 +775,19 @@ async function ensureBattleThread(client, battle, message) {
 }
 
 function isBattleInteractionAllowed(interaction, assignedBattleChannelId, battle) {
-  if (!assignedBattleChannelId || !battle?.threadId) {
+  if (!assignedBattleChannelId || !battle) {
     return false;
   }
 
-  return interaction.channelId === battle.threadId;
+  if (interaction.channelId === battle.threadId) {
+    return true;
+  }
+
+  if (interaction.channelId === battle.channelId) {
+    return true;
+  }
+
+  return false;
 }
 
 function isDraftInteractionAllowed(interaction, assignedBattleChannelId, draft) {
