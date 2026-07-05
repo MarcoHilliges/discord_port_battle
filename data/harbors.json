@@ -1,0 +1,404 @@
+{
+  "harbors": [
+    {
+      "harbor": "al_khalif",
+      "name": "Al-Khalif",
+      "port_battle_possible": false,
+      "lighthouses": [
+        "north",
+        "south-east",
+        "north-west"
+      ]
+    },
+    {
+      "harbor": "aldansk",
+      "name": "Aldansk",
+      "port_battle_possible": false,
+      "lighthouses": [
+        "east",
+        "south",
+        "west"
+      ]
+    },
+    {
+      "harbor": "aruba",
+      "name": "Aruba",
+      "port_battle_possible": true,
+      "lighthouses": [
+        "north-east",
+        "south",
+        "north-west"
+      ]
+    },
+    {
+      "harbor": "assab",
+      "name": "Assab",
+      "port_battle_possible": false,
+      "lighthouses": [
+        "north",
+        "east",
+        "south"
+      ]
+    },
+    {
+      "harbor": "bord_radel",
+      "name": "Bord Radel",
+      "port_battle_possible": true,
+      "lighthouses": [
+        "north-east",
+        "south-east",
+        "north-west"
+      ]
+    },
+    {
+      "harbor": "brandport",
+      "name": "Brandport",
+      "port_battle_possible": false,
+      "lighthouses": [
+        "north",
+        "south-east",
+        "south-west"
+      ]
+    },
+    {
+      "harbor": "bridgetown",
+      "name": "Bridgetown",
+      "port_battle_possible": true,
+      "lighthouses": [
+        "north-east",
+        "south",
+        "west"
+      ]
+    },
+    {
+      "harbor": "charleston",
+      "name": "Charleston",
+      "port_battle_possible": true,
+      "lighthouses": [
+        "south-east",
+        "south-west",
+        "north-west"
+      ]
+    },
+    {
+      "harbor": "corsa_nois_bay",
+      "name": "Corsa-Nois Bay",
+      "port_battle_possible": false,
+      "lighthouses": []
+    },
+    {
+      "harbor": "cursed_city",
+      "name": "Cursed City",
+      "port_battle_possible": true,
+      "lighthouses": [
+        "north-east",
+        "south",
+        "north-west"
+      ]
+    },
+    {
+      "harbor": "devios",
+      "name": "Devios",
+      "port_battle_possible": true,
+      "lighthouses": [
+        "north",
+        "south-east",
+        "west"
+      ]
+    },
+    {
+      "harbor": "el_tigre",
+      "name": "El Tigre",
+      "port_battle_possible": false,
+      "lighthouses": [
+        "north",
+        "east",
+        "south-west"
+      ]
+    },
+    {
+      "harbor": "everston",
+      "name": "Everston",
+      "port_battle_possible": true,
+      "lighthouses": [
+        "east",
+        "south",
+        "north-west"
+      ]
+    },
+    {
+      "harbor": "fiji",
+      "name": "Fiji",
+      "port_battle_possible": true,
+      "lighthouses": [
+        "east",
+        "south",
+        "west"
+      ]
+    },
+    {
+      "harbor": "freebooter_bay",
+      "name": "Freebooter Bay",
+      "port_battle_possible": false,
+      "lighthouses": []
+    },
+    {
+      "harbor": "freedom_bay",
+      "name": "Freedom Bay",
+      "port_battle_possible": false,
+      "lighthouses": [
+        "north",
+        "south",
+        "west"
+      ]
+    },
+    {
+      "harbor": "gelbion",
+      "name": "Gelbion",
+      "port_battle_possible": true,
+      "lighthouses": [
+        "north",
+        "east",
+        "south"
+      ]
+    },
+    {
+      "harbor": "gray_island",
+      "name": "Gray Island",
+      "port_battle_possible": true,
+      "lighthouses": [
+        "east",
+        "south",
+        "west"
+      ]
+    },
+    {
+      "harbor": "la_navidad",
+      "name": "La Navidad",
+      "port_battle_possible": true,
+      "lighthouses": [
+        "north",
+        "north-east",
+        "west"
+      ]
+    },
+    {
+      "harbor": "laguna_blanco",
+      "name": "Laguna Blanco",
+      "port_battle_possible": true,
+      "lighthouses": [
+        "east",
+        "west",
+        "north-west"
+      ]
+    },
+    {
+      "harbor": "los_catuano",
+      "name": "Los Catuano",
+      "port_battle_possible": true,
+      "lighthouses": [
+        "north",
+        "south",
+        "west"
+      ]
+    },
+    {
+      "harbor": "masadora",
+      "name": "Masadora",
+      "port_battle_possible": true,
+      "lighthouses": [
+        "north-east",
+        "south-east",
+        "north-west"
+      ]
+    },
+    {
+      "harbor": "naabad_stronghold",
+      "name": "Naabad Stronghold",
+      "port_battle_possible": false,
+      "lighthouses": []
+    },
+    {
+      "harbor": "nevis",
+      "name": "Nevis",
+      "port_battle_possible": true,
+      "lighthouses": [
+        "north",
+        "east",
+        "south"
+      ]
+    },
+    {
+      "harbor": "nisogora",
+      "name": "Nisogora",
+      "port_battle_possible": true,
+      "lighthouses": [
+        "north-east",
+        "south-east",
+        "south-west"
+      ]
+    },
+    {
+      "harbor": "nordberg",
+      "name": "Nordberg",
+      "port_battle_possible": false,
+      "lighthouses": [
+        "north",
+        "south-east",
+        "south-west"
+      ]
+    },
+    {
+      "harbor": "north_bastion",
+      "name": "North Bastion",
+      "port_battle_possible": true,
+      "lighthouses": [
+        "east",
+        "south-west",
+        "west"
+      ]
+    },
+    {
+      "harbor": "northside",
+      "name": "Northside",
+      "port_battle_possible": true,
+      "lighthouses": [
+        "south-east",
+        "south-west",
+        "west"
+      ]
+    },
+    {
+      "harbor": "oneg",
+      "name": "Oneg",
+      "port_battle_possible": true,
+      "lighthouses": [
+        "east",
+        "south",
+        "south-west"
+      ]
+    },
+    {
+      "harbor": "pirate_city",
+      "name": "Pirate City",
+      "port_battle_possible": false,
+      "lighthouses": []
+    },
+    {
+      "harbor": "puerto_salada",
+      "name": "Puerto Salada",
+      "port_battle_possible": true,
+      "lighthouses": [
+        "east",
+        "south",
+        "west"
+      ]
+    },
+    {
+      "harbor": "san_cristobel",
+      "name": "San Cristobel",
+      "port_battle_possible": true,
+      "lighthouses": [
+        "north-east",
+        "east",
+        "north-west"
+      ]
+    },
+    {
+      "harbor": "san_martinas",
+      "name": "San Martinas",
+      "port_battle_possible": true,
+      "lighthouses": [
+        "east",
+        "south-west",
+        "north-west"
+      ]
+    },
+    {
+      "harbor": "santa_maria",
+      "name": "Santa Maria",
+      "port_battle_possible": false,
+      "lighthouses": [
+        "north-east",
+        "south",
+        "north-west"
+      ]
+    },
+    {
+      "harbor": "severoangelsk",
+      "name": "Severoangelsk",
+      "port_battle_possible": true,
+      "lighthouses": [
+        "south-east",
+        "south",
+        "west"
+      ]
+    },
+    {
+      "harbor": "sharhat",
+      "name": "Sharhat",
+      "port_battle_possible": false,
+      "lighthouses": [
+        "north",
+        "north-east",
+        "south-west"
+      ]
+    },
+    {
+      "harbor": "south_bastion",
+      "name": "South Bastion",
+      "port_battle_possible": true,
+      "lighthouses": [
+        "north",
+        "east",
+        "south-west"
+      ]
+    },
+    {
+      "harbor": "st_jean",
+      "name": "St. Jean",
+      "port_battle_possible": false,
+      "lighthouses": [
+        "north",
+        "south",
+        "west"
+      ]
+    },
+    {
+      "harbor": "surako",
+      "name": "Surako",
+      "port_battle_possible": false,
+      "lighthouses": [
+        "north",
+        "east",
+        "south"
+      ]
+    },
+    {
+      "harbor": "thermopylae",
+      "name": "Thermopylae",
+      "port_battle_possible": true,
+      "lighthouses": [
+        "north",
+        "south",
+        "west"
+      ]
+    },
+    {
+      "harbor": "tortuga",
+      "name": "Tortuga",
+      "port_battle_possible": false,
+      "lighthouses": []
+    },
+    {
+      "harbor": "west_bastion",
+      "name": "West Bastion",
+      "port_battle_possible": true,
+      "lighthouses": [
+        "east",
+        "south",
+        "north-west"
+      ]
+    }
+  ]
+}
